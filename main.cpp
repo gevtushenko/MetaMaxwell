@@ -77,10 +77,8 @@ constexpr float update_curl_ey (unsigned int cell_id, float dx, const std::array
 }
 
 template <unsigned int nx, unsigned int ny>
-constexpr float calculate_dt ()
+constexpr float calculate_dt (float dx, float dy)
 {
-  constexpr float dx = 1.0f / nx;
-  constexpr float dy = 1.0f / ny;
   constexpr float cfl = 0.5;
 
   return cfl * std::min (dx, dy) / C0;
@@ -106,16 +104,40 @@ constexpr float gaussian_pulse (float t, float t_0, float tau)
   return std::exp (-(((t - t_0) / tau) * (t - t_0) / tau));
 }
 
+constexpr float harmonic_source (float t, float frequency)
+{
+  const float value = t * frequency;
+
+  if (value != 0)
+    return std::cos (value);
+  return 0.0;
+}
+
+constexpr float step_source (float t)
+{
+  if (t < 1E-10)
+    return 1.0f;
+  return 0.0f;
+}
+
 constexpr float calculate_source (float t, float frequency)
 {
+  #if 0
   const float tau = 0.5f / frequency;
   const float t_0 = 6.0f * tau;
   return gaussian_pulse (t, t_0, tau);
+  #endif
+
+  // return harmonic_source (t, frequency);
+  return step_source (t);
 }
 
 template <unsigned int nx, unsigned int ny>
 constexpr auto fdtd (
   float &t,
+  float dt,
+  float dx,
+  float dy,
   unsigned int steps,
   std::array<float, nx * ny> er,
   std::array<float, nx * ny> mh,
@@ -126,14 +148,10 @@ constexpr auto fdtd (
   std::array<float, nx * ny> dz
   )
 {
-constexpr unsigned int n_cells = nx * ny;
-  constexpr double dt = calculate_dt<nx, ny> ();
+  constexpr unsigned int n_cells = nx * ny;
 
   const unsigned int source_cell = get_cell_id(nx / 2, ny / 2, nx);
   const float source_frequency = 1E+9;
-
-  constexpr float dx = 1.0f / nx;
-  constexpr float dy = 1.0f / ny;
 
   for (unsigned int step = 0; step < steps; step++)
     {
@@ -162,7 +180,9 @@ template <unsigned int nx, unsigned int ny, unsigned int report_steps>
 constexpr auto collect_time_steps (unsigned int report_each)
 {
   constexpr unsigned int n_cells = nx * ny;
-  constexpr double dt = calculate_dt<nx, ny> ();
+  constexpr float dx = 3.0f / nx;
+  constexpr float dy = 3.0f / ny;
+  constexpr double dt = calculate_dt<nx, ny> (dx, dy);
   std::array<float, n_cells> er {};
   std::array<float, n_cells> hr {};
   std::array<float, n_cells> mh {};
@@ -190,7 +210,7 @@ constexpr auto collect_time_steps (unsigned int report_each)
 
   std::array<std::array<float, nx * ny>, report_steps> report {};
   for (unsigned int report_step = 0; report_step < report_steps; report_step++)
-    report[report_step] = fdtd<nx, ny> (t, report_each, er, mh, hx, hy, ez, dz);
+    report[report_step] = fdtd<nx, ny> (t, dt, dx, dy, report_each, er, mh, hx, hy, ez, dz);
   return report;
 }
 
@@ -251,10 +271,10 @@ int main ()
 {
   constexpr unsigned int nx = 40;
   constexpr unsigned int ny = 40;
-  constexpr auto reports = collect_time_steps<nx, ny, 10> (10);
+  constexpr auto reports = collect_time_steps<nx, ny, 2> (10);
 
   for (unsigned int report = 0; report < reports.size (); report++)
-    write_vtk<float> ("output_" + std::to_string (report) + ".vtk", 1.0 / nx, 1.0 / ny, nx, ny, reports[report].data ());
+    write_vtk<float> ("output_" + std::to_string (report) + ".vtk", 3.0 / nx, 3.0 / ny, nx, ny, reports[report].data ());
 
   return 0;
 }
