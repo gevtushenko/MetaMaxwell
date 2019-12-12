@@ -62,15 +62,15 @@ constexpr unsigned int get_neighbor_id (unsigned int cell_id, unsigned int edge_
   return -1;
 }
 
-template<unsigned int nx, unsigned int ny>
-constexpr float update_curl_ex (unsigned int cell_id, float dy, const std::array<float, nx * ny> &ez)
+template<typename float_type, unsigned int nx, unsigned int ny>
+constexpr float_type update_curl_ex (unsigned int cell_id, float_type dy, const std::array<float_type, nx * ny> &ez)
 {
   const unsigned int neighbor_id = get_neighbor_id (cell_id, side_to_id (side_type::top), nx, ny);
   return (ez[neighbor_id] - ez[cell_id]) / dy;
 }
 
-template<unsigned int nx, unsigned int ny>
-constexpr float update_curl_ey (unsigned int cell_id, float dx, const std::array<float, nx * ny> &ez)
+template<typename float_type, unsigned int nx, unsigned int ny>
+constexpr float_type update_curl_ey (unsigned int cell_id, float_type dx, const std::array<float_type, nx * ny> &ez)
 {
   const unsigned int neighbor_id = get_neighbor_id (cell_id, side_to_id (side_type::right), nx, ny);
   return -(ez[neighbor_id] - ez[cell_id]) / dx;
@@ -84,12 +84,12 @@ constexpr float calculate_dt (float dx, float dy)
   return cfl * std::min (dx, dy) / C0;
 }
 
-template <unsigned int nx, unsigned int ny>
-constexpr float update_curl_h (
+template <typename float_type, unsigned int nx, unsigned int ny>
+constexpr float_type update_curl_h (
   unsigned int cell_id,
-  float dx, float dy,
-  const std::array<float, nx * ny> hx,
-  const std::array<float, nx * ny> hy)
+  float_type dx, float_type dy,
+  const std::array<float_type, nx * ny> hx,
+  const std::array<float_type, nx * ny> hy)
 {
   // TODO For now assume that only periodic boundary conditions exist
   const unsigned int left_neighbor_id = get_neighbor_id (cell_id, side_to_id (side_type::left), nx, ny);
@@ -132,40 +132,40 @@ constexpr float calculate_source (float t, float frequency)
   // return step_source (t);
 }
 
-template <unsigned int nx, unsigned int ny>
+template <typename float_type, unsigned int nx, unsigned int ny>
 constexpr void fdtd (
-  float &t,
-  float dt,
-  float dx,
-  float dy,
+  float_type &t,
+  float_type dt,
+  float_type dx,
+  float_type dy,
   unsigned int steps,
-  std::array<float, nx * ny> &er,
-  const std::array<float, nx * ny> &mh,
+  std::array<float_type, nx * ny> &er,
+  const std::array<float_type, nx * ny> &mh,
 
-  std::array<float, nx * ny> &hx,
-  std::array<float, nx * ny> &hy,
-  std::array<float, nx * ny> &ez,
-  std::array<float, nx * ny> &dz
+  std::array<float_type, nx * ny> &hx,
+  std::array<float_type, nx * ny> &hy,
+  std::array<float_type, nx * ny> &ez,
+  std::array<float_type, nx * ny> &dz
   )
 {
   constexpr unsigned int n_cells = nx * ny;
 
   const unsigned int source_cell = get_cell_id(nx / 2, ny / 2, nx);
-  const float source_frequency = 1E+9;
+  const float_type source_frequency = 1E+9;
 
   for (unsigned int step = 0; step < steps; step++)
     {
       /// Update h
       for (unsigned int i = 0; i < n_cells; i++)
         {
-          hx[i] -= mh[i] * update_curl_ex<nx, ny> (i, dy, ez);
-          hy[i] -= mh[i] * update_curl_ey<nx, ny> (i, dx, ez);
+          hx[i] -= mh[i] * update_curl_ex<float_type, nx, ny> (i, dy, ez);
+          hy[i] -= mh[i] * update_curl_ey<float_type, nx, ny> (i, dx, ez);
         }
 
       /// Update e
       for (unsigned int i = 0; i < n_cells; i++)
         {
-          dz[i] += C0 * dt * update_curl_h<nx, ny> (i, dx, dy, hx, hy);
+          dz[i] += C0 * dt * update_curl_h<float_type, nx, ny> (i, dx, dy, hx, hy);
           dz[source_cell] += calculate_source (t, source_frequency); /// Update source
           ez[i] = dz[i] / er[i];
         }
@@ -174,21 +174,21 @@ constexpr void fdtd (
     }
 }
 
-template <unsigned int nx, unsigned int ny, unsigned int report_steps>
+template <typename float_type, unsigned int nx, unsigned int ny, unsigned int report_steps>
 constexpr auto collect_time_steps (unsigned int report_each)
 {
   constexpr unsigned int n_cells = nx * ny;
-  constexpr float dx = 3.0f / nx;
-  constexpr float dy = 3.0f / ny;
-  constexpr double dt = calculate_dt<nx, ny> (dx, dy);
-  std::array<float, n_cells> er {};
-  std::array<float, n_cells> hr {};
-  std::array<float, n_cells> mh {};
+  constexpr float_type dx = 3.0f / nx;
+  constexpr float_type dy = 3.0f / ny;
+  constexpr float_type dt = calculate_dt<nx, ny> (dx, dy);
+  std::array<float_type, n_cells> er {};
+  std::array<float_type, n_cells> hr {};
+  std::array<float_type, n_cells> mh {};
 
-  std::array<float, n_cells> hx {};
-  std::array<float, n_cells> hy {};
-  std::array<float, n_cells> ez {};
-  std::array<float, n_cells> dz {};
+  std::array<float_type, n_cells> hx {};
+  std::array<float_type, n_cells> hy {};
+  std::array<float_type, n_cells> ez {};
+  std::array<float_type, n_cells> dz {};
 
   for (unsigned int i = 0; i < n_cells; i++)
     {
@@ -204,12 +204,12 @@ constexpr auto collect_time_steps (unsigned int report_each)
   for (unsigned int i = 0; i < n_cells; i++)
     mh[i] = C0 * dt / hr[i];
 
-  float t = 0.0;
+  float_type t = 0.0;
 
-  std::array<std::array<float, nx * ny>, report_steps> report {};
+  std::array<std::array<float_type, nx * ny>, report_steps> report {};
   for (unsigned int report_step = 0; report_step < report_steps; report_step++)
     {
-      fdtd<nx, ny> (t, dt, dx, dy, report_each, er, mh, hx, hy, ez, dz);
+      fdtd<float_type, nx, ny> (t, dt, dx, dy, report_each, er, mh, hx, hy, ez, dz);
 
       for (unsigned int i = 0; i < n_cells; i++)
         report[report_step][i] = ez[i];
@@ -274,10 +274,10 @@ int main ()
 {
   constexpr unsigned int nx = 45;
   constexpr unsigned int ny = 45;
-  constexpr auto reports = collect_time_steps<nx, ny, 8> (10);
+  constexpr auto reports = collect_time_steps<double, nx, ny, 10> (10);
 
   for (unsigned int report = 0; report < reports.size (); report++)
-    write_vtk<float> ("output_" + std::to_string (report) + ".vtk", 3.0 / nx, 3.0 / ny, nx, ny, reports[report].data ());
+    write_vtk<double> ("output_" + std::to_string (report) + ".vtk", 3.0 / nx, 3.0 / ny, nx, ny, reports[report].data ());
 
   return 0;
 }
