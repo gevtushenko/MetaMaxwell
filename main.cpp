@@ -79,7 +79,7 @@ constexpr float update_curl_ey (unsigned int cell_id, float dx, const std::array
 template <unsigned int nx, unsigned int ny>
 constexpr float calculate_dt (float dx, float dy)
 {
-  constexpr float cfl = 0.5;
+  constexpr float cfl = 0.6;
 
   return cfl * std::min (dx, dy) / C0;
 }
@@ -128,24 +128,24 @@ constexpr float calculate_source (float t, float frequency)
   return gaussian_pulse (t, t_0, tau);
   #endif
 
-  // return harmonic_source (t, frequency);
-  return step_source (t);
+  return harmonic_source (t, frequency);
+  // return step_source (t);
 }
 
 template <unsigned int nx, unsigned int ny>
-constexpr auto fdtd (
+constexpr void fdtd (
   float &t,
   float dt,
   float dx,
   float dy,
   unsigned int steps,
-  std::array<float, nx * ny> er,
-  std::array<float, nx * ny> mh,
+  std::array<float, nx * ny> &er,
+  const std::array<float, nx * ny> &mh,
 
-  std::array<float, nx * ny> hx,
-  std::array<float, nx * ny> hy,
-  std::array<float, nx * ny> ez,
-  std::array<float, nx * ny> dz
+  std::array<float, nx * ny> &hx,
+  std::array<float, nx * ny> &hy,
+  std::array<float, nx * ny> &ez,
+  std::array<float, nx * ny> &dz
   )
 {
   constexpr unsigned int n_cells = nx * ny;
@@ -172,8 +172,6 @@ constexpr auto fdtd (
 
       t += dt;
     }
-
-  return ez;
 }
 
 template <unsigned int nx, unsigned int ny, unsigned int report_steps>
@@ -210,7 +208,12 @@ constexpr auto collect_time_steps (unsigned int report_each)
 
   std::array<std::array<float, nx * ny>, report_steps> report {};
   for (unsigned int report_step = 0; report_step < report_steps; report_step++)
-    report[report_step] = fdtd<nx, ny> (t, dt, dx, dy, report_each, er, mh, hx, hy, ez, dz);
+    {
+      fdtd<nx, ny> (t, dt, dx, dy, report_each, er, mh, hx, hy, ez, dz);
+
+      for (unsigned int i = 0; i < n_cells; i++)
+        report[report_step][i] = ez[i];
+    }
   return report;
 }
 
@@ -269,9 +272,9 @@ void write_vtk (
 
 int main ()
 {
-  constexpr unsigned int nx = 40;
-  constexpr unsigned int ny = 40;
-  constexpr auto reports = collect_time_steps<nx, ny, 2> (10);
+  constexpr unsigned int nx = 45;
+  constexpr unsigned int ny = 45;
+  constexpr auto reports = collect_time_steps<nx, ny, 8> (10);
 
   for (unsigned int report = 0; report < reports.size (); report++)
     write_vtk<float> ("output_" + std::to_string (report) + ".vtk", 3.0 / nx, 3.0 / ny, nx, ny, reports[report].data ());
