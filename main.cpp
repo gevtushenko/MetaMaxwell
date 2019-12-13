@@ -79,7 +79,7 @@ constexpr float_type update_curl_ey (unsigned int cell_id, float_type dx, const 
 template <unsigned int nx, unsigned int ny>
 constexpr float calculate_dt (float dx, float dy)
 {
-  constexpr float cfl = 0.6;
+  constexpr float cfl = 0.7;
 
   return cfl * std::min (dx, dy) / C0;
 }
@@ -99,9 +99,28 @@ constexpr float_type update_curl_h (
        - (hx[cell_id] - hx[bottom_neighbor_id]) / dy;
 }
 
+constexpr double pow(double x, int y)
+{
+  return y == 0 ? 1.0 : x * pow(x, y-1);
+}
+
+constexpr int factorial(int x)
+{
+  return x == 0 ? 1 : x * factorial(x-1);
+}
+
+constexpr double exp(double x)
+{
+  return 1.0 + x
+         + pow(x,2)/factorial(2) + pow(x, 3)/factorial(3)
+         + pow(x, 4)/factorial(4) + pow(x, 5)/factorial(5)
+         + pow(x,6)/factorial(6) + pow(x, 7)/factorial(7)
+         + pow(x, 8)/factorial(8) + pow(x, 9)/factorial(9);
+}
+
 constexpr float gaussian_pulse (float t, float t_0, float tau)
 {
-  return std::exp (-(((t - t_0) / tau) * (t - t_0) / tau));
+  return exp (-(((t - t_0) / tau) * (t - t_0) / tau));
 }
 
 constexpr float harmonic_source (float t, float frequency)
@@ -128,8 +147,8 @@ constexpr float calculate_source (float t, float frequency)
   return gaussian_pulse (t, t_0, tau);
   #endif
 
-  return harmonic_source (t, frequency);
-  // return step_source (t);
+  // return harmonic_source (t, frequency);
+  return step_source (t);
 }
 
 template <typename float_type, unsigned int nx, unsigned int ny>
@@ -272,9 +291,9 @@ void write_vtk (
 
 int main ()
 {
-  constexpr unsigned int nx = 45;
-  constexpr unsigned int ny = 45;
-  constexpr auto reports = collect_time_steps<double, nx, ny, 10> (10);
+  constexpr unsigned int nx = 40;
+  constexpr unsigned int ny = 40;
+  constexpr auto reports = collect_time_steps<double, nx, ny, 8> (10);
 
   for (unsigned int report = 0; report < reports.size (); report++)
     write_vtk<double> ("output_" + std::to_string (report) + ".vtk", 3.0 / nx, 3.0 / ny, nx, ny, reports[report].data ());
