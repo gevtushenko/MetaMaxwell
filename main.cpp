@@ -109,7 +109,7 @@ constexpr int factorial(int x)
   return x == 0 ? 1 : x * factorial(x-1);
 }
 
-constexpr double exp(double x)
+constexpr double exp_9 (double x)
 {
   return 1.0 + x
          + pow(x,2)/factorial(2) + pow(x, 3)/factorial(3)
@@ -120,7 +120,7 @@ constexpr double exp(double x)
 
 constexpr float gaussian_pulse (float t, float t_0, float tau)
 {
-  return exp (-(((t - t_0) / tau) * (t - t_0) / tau));
+  return exp_9 (-(((t - t_0) / tau) * (t - t_0) / tau));
 }
 
 constexpr float harmonic_source (float t, float frequency)
@@ -291,8 +291,8 @@ void write_vtk (
 
 int main ()
 {
-  constexpr unsigned int nx = 40;
-  constexpr unsigned int ny = 40;
+  constexpr unsigned int nx = 80;
+  constexpr unsigned int ny = 80;
   constexpr auto reports = collect_time_steps<double, nx, ny, 8> (10);
 
   for (unsigned int report = 0; report < reports.size (); report++)
