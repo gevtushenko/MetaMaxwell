@@ -51,13 +51,13 @@ constexpr unsigned int get_neighbor_id (unsigned int cell_id, unsigned int edge_
   unsigned int y = get_cell_y (cell_id, nx);
 
   if (is_edge_left (edge_id))
-    return is_cell_on_left_boundary (x) ? cell_id : get_cell_id (x - 1, y, nx);
+    return is_cell_on_left_boundary (x) ? get_cell_id(nx - 1, y, nx) : get_cell_id (x - 1, y, nx);
   else if (is_edge_bottom (edge_id))
-    return is_cell_on_bottom_boundary (y) ? cell_id : get_cell_id (x, y - 1, nx);
+    return is_cell_on_bottom_boundary (y) ? get_cell_id (x, ny - 1, nx) : get_cell_id (x, y - 1, nx);
   else if (is_edge_right (edge_id))
-    return is_cell_on_right_boundary (x, nx) ? cell_id : get_cell_id (x + 1, y, nx);
+    return is_cell_on_right_boundary (x, nx) ? get_cell_id (0, y, nx) : get_cell_id (x + 1, y, nx);
   else if (is_edge_top (edge_id))
-    return is_cell_on_top_boundary (y, ny) ? cell_id : get_cell_id (x, y + 1, nx);
+    return is_cell_on_top_boundary (y, ny) ? get_cell_id (x, 0, nx) : get_cell_id (x, y + 1, nx);
 
   return -1;
 }
@@ -79,7 +79,7 @@ constexpr float_type update_curl_ey (unsigned int cell_id, float_type dx, const 
 template <unsigned int nx, unsigned int ny>
 constexpr float calculate_dt (float dx, float dy)
 {
-  constexpr float cfl = 0.7;
+  constexpr float cfl = 0.5;
 
   return cfl * std::min (dx, dy) / C0;
 }
@@ -99,28 +99,30 @@ constexpr float_type update_curl_h (
        - (hx[cell_id] - hx[bottom_neighbor_id]) / dy;
 }
 
-constexpr double pow(double x, int y)
-{
-  return y == 0 ? 1.0 : x * pow(x, y-1);
-}
+template<typename Real, size_t degree, size_t i = 0>
+struct Recursion {
+  static constexpr Real evaluate(Real x) {
+    constexpr Real c = 1.0 / static_cast<Real>(1u << degree);
+    x = Recursion<Real, degree, i + 1>::evaluate(x);
+    return x * x;
+  }
+};
 
-constexpr int factorial(int x)
-{
-  return x == 0 ? 1 : x * factorial(x-1);
-}
+template<typename Real, size_t degree>
+struct Recursion<Real, degree, degree> {
+  static constexpr Real evaluate(Real x) {
+    constexpr Real c = 1.0 / static_cast<Real>(1u << degree);
+    x = 1.0 + c * x;
+    return x;
+  }
+};
 
-constexpr double exp_9 (double x)
+template <typename float_type>
+constexpr float_type gaussian_pulse (float_type t, float_type t_0, float_type tau)
 {
-  return 1.0 + x
-         + pow(x,2)/factorial(2) + pow(x, 3)/factorial(3)
-         + pow(x, 4)/factorial(4) + pow(x, 5)/factorial(5)
-         + pow(x,6)/factorial(6) + pow(x, 7)/factorial(7)
-         + pow(x, 8)/factorial(8) + pow(x, 9)/factorial(9);
-}
-
-constexpr float gaussian_pulse (float t, float t_0, float tau)
-{
-  return exp_9 (-(((t - t_0) / tau) * (t - t_0) / tau));
+  const float_type value = -(((t - t_0) / tau) * (t - t_0) / tau);
+  const float_type exp_value = Recursion<float_type, 8>::evaluate (value);
+  return exp_value;
 }
 
 constexpr float harmonic_source (float t, float frequency)
@@ -139,16 +141,15 @@ constexpr float step_source (float t)
   return 0.0f;
 }
 
-constexpr float calculate_source (float t, float frequency)
+template <typename float_type>
+constexpr float_type calculate_source (float_type t, float_type frequency)
 {
-  #if 0
-  const float tau = 0.5f / frequency;
-  const float t_0 = 6.0f * tau;
+  const float_type tau = 0.5f / frequency;
+  const float_type t_0 = 6.0f * tau;
   return gaussian_pulse (t, t_0, tau);
-  #endif
 
   // return harmonic_source (t, frequency);
-  return step_source (t);
+  // return step_source (t);
 }
 
 template <typename float_type, unsigned int nx, unsigned int ny>
@@ -169,11 +170,13 @@ constexpr void fdtd (
 {
   constexpr unsigned int n_cells = nx * ny;
 
-  const unsigned int source_cell = get_cell_id(nx / 2, ny / 2, nx);
+  const unsigned int source_cell = get_cell_id(nx / 4, ny / 4, nx);
   const float_type source_frequency = 1E+9;
 
   for (unsigned int step = 0; step < steps; step++)
     {
+      t += dt;
+
       /// Update h
       for (unsigned int i = 0; i < n_cells; i++)
         {
@@ -183,13 +186,12 @@ constexpr void fdtd (
 
       /// Update e
       for (unsigned int i = 0; i < n_cells; i++)
-        {
-          dz[i] += C0 * dt * update_curl_h<float_type, nx, ny> (i, dx, dy, hx, hy);
-          dz[source_cell] += calculate_source (t, source_frequency); /// Update source
-          ez[i] = dz[i] / er[i];
-        }
+        dz[i] += C0 * dt * update_curl_h<float_type, nx, ny> (i, dx, dy, hx, hy);
 
-      t += dt;
+      dz[source_cell] += calculate_source (t, source_frequency); /// Update source
+
+      for (unsigned int i = 0; i < n_cells; i++)
+        ez[i] = dz[i] / er[i];
     }
 }
 
@@ -197,8 +199,8 @@ template <typename float_type, unsigned int nx, unsigned int ny, unsigned int re
 constexpr auto collect_time_steps (unsigned int report_each)
 {
   constexpr unsigned int n_cells = nx * ny;
-  constexpr float_type dx = 3.0f / nx;
-  constexpr float_type dy = 3.0f / ny;
+  constexpr float_type dx = 2.0f / nx;
+  constexpr float_type dy = 2.0f / ny;
   constexpr float_type dt = calculate_dt<nx, ny> (dx, dy);
   std::array<float_type, n_cells> er {};
   std::array<float_type, n_cells> hr {};
@@ -291,12 +293,12 @@ void write_vtk (
 
 int main ()
 {
-  constexpr unsigned int nx = 80;
-  constexpr unsigned int ny = 80;
-  constexpr auto reports = collect_time_steps<double, nx, ny, 8> (10);
+  constexpr unsigned int nx = 50;
+  constexpr unsigned int ny = 50;
+  constexpr auto reports = collect_time_steps<double, nx, ny, 120> (1);
 
   for (unsigned int report = 0; report < reports.size (); report++)
-    write_vtk<double> ("output_" + std::to_string (report) + ".vtk", 3.0 / nx, 3.0 / ny, nx, ny, reports[report].data ());
+    write_vtk<double> ("output_" + std::to_string (report) + ".vtk", 2.0 / nx, 2.0 / ny, nx, ny, reports[report].data ());
 
   return 0;
 }
